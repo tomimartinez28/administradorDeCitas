@@ -1,7 +1,7 @@
 import Citas from './classes/Citas.js';
 import UI from './classes/Ui.js';
 import { mascotaInput, propietarioInput, telefonoInput, fechaInput, horaInput, sintomasInput, formulario  } from './selectores.js'
-
+export let DB;
 
 const administrarCitas = new Citas();
 const ui = new UI();
@@ -31,18 +31,19 @@ export function datosCita(e){
 
 // elimina una cita
 export function eliminarCita(id) {
-    // eliminar la cita
-    administrarCitas.eliminarCita(id)
+    const transaction = DB.transaction(['citas'], 'readwrite');
+    const objectStore = transaction.objectStore('citas');
+    objectStore.delete(id)
 
-    // enviar un mensaje
-    ui.mostrarAlerta('La cita se elimino correctamente')
+    transaction.oncomplete = () => {
+        console.log('Cita eliminada');
+        ui.imprimirCitas()
+    }
 
-    // refrescar el html
-
-    ui.imprimitCitas(administrarCitas);
-
+    transaction.onerror = () =>{
+        console.log('Error al eliminar registro.');
+    }
 }
-
 
 
 // reinicia el objeto
@@ -60,59 +61,73 @@ export function reiniciarObjeto() {
 export function nuevaCita(e) {
     e.preventDefault();
 
-    // extraer la info del objeto
-    const { mascota, propietario, telefono, fecha, hora, sintomas } = citasObj;
+    const {mascota, propietario, telefono, fecha, hora, sintomas } = citasObj;
 
-    // validar 
-    if(mascota === '' || propietario === '' || telefono === '' || fecha === '' || hora === '' || sintomas === '' ) {
-        ui.mostrarAlerta('Todos los campos son obligatorios', 'error');
-        return
+    // Validar
+    if( mascota === '' || propietario === '' || telefono === '' || fecha === ''  || hora === '' || sintomas === '' ) {
+        ui.mostrarAlerta('Todos los mensajes son Obligatorios', 'error')
+
+        return;
     }
 
-
-    // verifica si esta en modo edicion
     if(modoEdicion) {
+        // Estamos editando
+        administrarCitas.editarCita( {...citasObj} );
 
-        // cambiar el texto del boton
-        formulario.querySelector('button[type = "submit"]').textContent = 'Crear cita';
+        // edita de la base de datos;
+        const transaction = DB.transaction(['citas'], 'readwrite');
+        const objectStore = transaction.objectStore('citas');
+        objectStore.put(citasObj);
+
+        transaction.oncomplete = () => {
+            ui.mostrarAlerta('Guardado Correctamente');
+
+            formulario.querySelector('button[type="submit"]').textContent = 'Crear Cita';
+    
+            modoEdicion = false;
+        }
+
+        transaction.onerror = () => {
+            console.log('Hubo un error Error');
+        }
 
 
-        // editar el objeto de la cita
-        administrarCitas.editarCita({...citasObj})
 
-
-
-        // mensaje
-        ui.mostrarAlerta('La cita se edito correctamente...');
-
-        // quita modo edicion
-        modoEdicion = false;
 
     } else {
-        // generar un id
-        citasObj.id = Date.now();
+        // Nuevo Registro
 
-        // agrega la cita al array
+
+        // Generar un ID único
+        citasObj.id = Date.now();
+        
+
+        // Añade la nueva cita
         administrarCitas.agregarCita({...citasObj});
 
-        ui.mostrarAlerta('La cita se agrego correctamente...')
+
+        // INSERTARLA EN LA BASE DE DATOS DE INDEXEDDB
+        const transaction = DB.transaction(['citas'], 'readwrite');
+        const objectStore = transaction.objectStore('citas');
+        objectStore.add(citasObj);
+        transaction.oncomplete = function() {
+            // Mostrar mensaje de que todo esta bien...
+            ui.mostrarAlerta('Se agregó correctamente')
+        } 
 
 
+        
     }
 
 
+    // Imprimir el HTML de citas
+    ui.imprimirCitas();
 
-
-
-    // reseteo el formulario
-    formulario.reset()
-
-    // reiniciar el objeto
+    // Reinicia el objeto para evitar futuros problemas de validación
     reiniciarObjeto();
 
-    // imprimir citas
-    ui.imprimitCitas(administrarCitas);
-
+    // Reiniciar Formulario
+    formulario.reset();
 
 }
 
@@ -149,5 +164,46 @@ export function cargarEdicion(cita) {
     // activo modo edicion
     modoEdicion = true;
 
+}
+
+
+
+// Function que crea la base de datos
+export function crearDB() {
+    // Crear la base de datos version 1.0
+    const crearDB = window.indexedDB.open('citas', 1);
+
+    // Si hay un error
+    crearDB.onerror = function() {
+        console.log('ERROR AL CREAR LA BASE DE DATOS');
+    }
+
+    // Si todo sale bien
+    crearDB.onsuccess = function() {
+        console.log('Base de datos creada');
+        DB = crearDB.result;
+        // Luego de que recarga la pagina, y crea la base de datos, lee los datos de la DB y los imprime
+        ui.imprimirCitas()
+    }
+
+    // DEFINIR EL SCHEMA
+    crearDB.onupgradeneeded = function(e) {
+        const db = e.target.result;
+        const objectStore = db.createObjectStore('citas', {
+            keyPath: 'id',
+            autoIncrement: true,
+        });
+
+        // Definir todas las columnas
+        objectStore.createIndex('mascota', 'mascota', { unique: false });
+        objectStore.createIndex('propietario', 'propietario', { unique: false });
+        objectStore.createIndex('telefono', 'telefono', { unique: false });
+        objectStore.createIndex('fecha', 'fecha', { unique: false });
+        objectStore.createIndex('hora', 'hora', { unique: false });
+        objectStore.createIndex('sintomas', 'sintomas', { unique: false });
+        objectStore.createIndex('id', 'id', { unique: true });
+        
+        console.log('Tabla creada');
+    }
 }
 

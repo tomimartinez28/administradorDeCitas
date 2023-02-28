@@ -1,4 +1,4 @@
-import { datosCita, nuevaCita} from '../functions.js';
+import { crearDB, datosCita, nuevaCita} from '../functions.js';
 import { mascotaInput, propietarioInput, telefonoInput, fechaInput, horaInput, sintomasInput, formulario  } from '../selectores.js';
 
 
@@ -14,6 +14,7 @@ class App {
         fechaInput.addEventListener('input', datosCita);
         horaInput.addEventListener('input', datosCita);
         sintomasInput.addEventListener('input', datosCita);
+        document.addEventListener('DOMContentLoaded', crearDB)
 
         // formulario para nuevas citas
         formulario.addEventListener('submit', nuevaCita)
